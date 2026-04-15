@@ -1,0 +1,2 @@
+#pragma code_page(65001)
+1 /* CREATEPROCESS_MANIFEST_RESOURCE_ID */ 24 /* RT_MANIFEST */ "C:/Users/joiko/source/repos/cyberCat_ver2/out/build/x64-debug/cyberCat_ver2/CMakeFiles/cyberCat_ver2.dir/embed.manifest"

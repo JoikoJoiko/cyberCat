@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/joiko/source/repos/cyberCat_ver2/out/build/x64-debug/cmake_install.cmake",
+		"C:/Users/joiko/source/repos/cyberCat_ver2/out/build/x64-debug/cyberCat_ver2/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,51 @@
+# Build директории
+build/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# CMake presets (локальные)
+CMakeUserPresets.json
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln
+*.slnx
+*.user
+*.suo
+*.opensdf
+*.log
+
+# Компиляция (C/C++)
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+*.out
+*.a
+
+# Debug / Release
+Debug/
+Release/
+x64/
+x86/
+
+# Временные файлы
+*.tmp
+*.temp
+*.cache
+*.pdb
+*.idb
+
+# OS мусор
+.DS_Store
+Thumbs.db
