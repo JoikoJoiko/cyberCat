@@ -1,20 +1,28 @@
 #pragma once
 
+#if defined(__cpp_inline_variables) && __cpp_inline_variables >= 201606L
+#define APPCFG_STORAGE inline
+#else
+#define APPCFG_STORAGE static
+#endif
+
 namespace AppConfig
 {
-    static constexpr wchar_t kAppTitle[] = L"cyberCat";
-    static constexpr wchar_t kMenuLabel[] = L"Menu";
-    static constexpr wchar_t kWelcomeLine1[] = L"Welcome back,";
-    static constexpr wchar_t kWelcomeLine2[] = L"Ms. Zarina";
-    static constexpr wchar_t kVersionLabel[] = L"Version 0.0.2";
+    APPCFG_STORAGE constexpr wchar_t kAppTitle[] = L"cyberCat";
+    APPCFG_STORAGE constexpr wchar_t kMenuLabel[] = L"Menu";
+    APPCFG_STORAGE constexpr wchar_t kWelcomeLine1[] = L"Welcome back,";
+    APPCFG_STORAGE constexpr wchar_t kWelcomeLine2[] = L"Ms. Zarina";
+    APPCFG_STORAGE constexpr wchar_t kVersionLabel[] = L"Version 0.0.2";
 
-    static constexpr int kTimezoneOffsetHours = 3;
+    APPCFG_STORAGE constexpr int kTimezoneOffsetHours = 3;
 
-    static constexpr wchar_t kMenuItems[][16] = {
+    APPCFG_STORAGE constexpr wchar_t kMenuItems[][16] = {
         L"Settings",
         L"Profiles",
         L"History"
     };
 
-    static constexpr int kMenuItemCount = sizeof(kMenuItems) / sizeof(kMenuItems[0]);
+    APPCFG_STORAGE constexpr int kMenuItemCount = sizeof(kMenuItems) / sizeof(kMenuItems[0]);
 }
+
+#undef APPCFG_STORAGE
