@@ -1,6 +1,10 @@
 ﻿#include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <strsafe.h>
+#include <ctime>
+
+#include "app_config.h"
 
 #pragma comment(lib, "dwmapi.lib")
 
@@ -15,6 +19,9 @@ constexpr int TITLEBAR_HEIGHT = 28;
 constexpr int BUTTON_WIDTH = 46;
 constexpr int CORNER_RADIUS = 12;
 constexpr int RESIZE_BORDER = 6;
+constexpr int SIDE_MENU_WIDTH = 160;
+constexpr int MENU_ITEM_HEIGHT = 86;
+constexpr int WM_APP_CLOCKTICK = 0x5001;
 
 enum class CaptionButton
 {
@@ -27,6 +34,7 @@ enum class CaptionButton
 struct UiState
 {
     CaptionButton hoveredButton = CaptionButton::None;
+    bool isMenuOpen = true;
 };
 
 struct WindowState
@@ -51,6 +59,16 @@ RECT GetMaxButtonRect(const RECT& rc)
 RECT GetCloseButtonRect(const RECT& rc)
 {
     return RECT{ rc.right - BUTTON_WIDTH, 0, rc.right, TITLEBAR_HEIGHT };
+}
+
+RECT GetMenuToggleRect()
+{
+    return RECT{ 10, 0, 140, TITLEBAR_HEIGHT };
+}
+
+RECT GetSideMenuRect(const RECT& rcClient)
+{
+    return RECT{ 0, TITLEBAR_HEIGHT, SIDE_MENU_WIDTH, rcClient.bottom };
 }
 
 bool PointInRectEx(POINT pt, const RECT& rc)
@@ -163,6 +181,99 @@ void ToggleMaximize(HWND hwnd)
     InvalidateRect(hwnd, nullptr, FALSE);
 }
 
+void FormatClockText(wchar_t* buffer, size_t bufferCount)
+{
+    std::time_t now = std::time(nullptr);
+    now += static_cast<std::time_t>(AppConfig::kTimezoneOffsetHours) * 60 * 60;
+
+    std::tm utcTm{};
+    gmtime_s(&utcTm, &now);
+
+    wchar_t sign = AppConfig::kTimezoneOffsetHours >= 0 ? L'+' : L'-';
+    int offset = AppConfig::kTimezoneOffsetHours >= 0 ? AppConfig::kTimezoneOffsetHours : -AppConfig::kTimezoneOffsetHours;
+
+    StringCchPrintfW(
+        buffer,
+        bufferCount,
+        L"%02d/%02d/%04d %02d:%02d:%02d GMT%c%d",
+        utcTm.tm_mday,
+        utcTm.tm_mon + 1,
+        utcTm.tm_year + 1900,
+        utcTm.tm_hour,
+        utcTm.tm_min,
+        utcTm.tm_sec,
+        sign,
+        offset
+    );
+}
+
+void DrawMenuToggle(HDC hdc)
+{
+    RECT rcMenu = GetMenuToggleRect();
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, ACCENT_COLOR);
+
+    RECT rcIcon{ rcMenu.left, rcMenu.top, rcMenu.left + 24, rcMenu.bottom };
+    DrawTextW(hdc, L"◈", -1, &rcIcon, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+    RECT rcText{ rcMenu.left + 24, rcMenu.top, rcMenu.right, rcMenu.bottom };
+    DrawTextW(hdc, AppConfig::kMenuLabel, -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+}
+
+void DrawSideMenu(HDC hdc, const RECT& rcClient)
+{
+    RECT rcSide = GetSideMenuRect(rcClient);
+    FillRectColor(hdc, rcSide, TITLEBAR_COLOR);
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, ACCENT_COLOR);
+
+    for (int i = 0; i < AppConfig::kMenuItemCount; ++i)
+    {
+        RECT rcItem{
+            rcSide.left,
+            TITLEBAR_HEIGHT + i * MENU_ITEM_HEIGHT,
+            rcSide.right,
+            TITLEBAR_HEIGHT + (i + 1) * MENU_ITEM_HEIGHT
+        };
+
+        RECT rcIcon{ rcItem.left + 18, rcItem.top, rcItem.left + 40, rcItem.bottom };
+        const wchar_t* icon = L"◌";
+        if (i == 0) icon = L"⚙";
+        if (i == 1) icon = L"☷";
+        if (i == 2) icon = L"◴";
+
+        DrawTextW(hdc, icon, -1, &rcIcon, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        RECT rcLabel{ rcItem.left + 48, rcItem.top, rcItem.right - 8, rcItem.bottom };
+        DrawTextW(hdc, AppConfig::kMenuItems[i], -1, &rcLabel, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
+
+    RECT rcVersion{ rcSide.left + 18, rcClient.bottom - 36, rcSide.right - 8, rcClient.bottom - 10 };
+    DrawTextW(hdc, AppConfig::kVersionLabel, -1, &rcVersion, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+}
+
+void DrawWelcomeText(HDC hdc, const RECT& rcClient)
+{
+    RECT rcWelcome = rcClient;
+    rcWelcome.top = TITLEBAR_HEIGHT;
+
+    if (g_uiState.isMenuOpen)
+    {
+        rcWelcome.left = SIDE_MENU_WIDTH;
+    }
+
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, ACCENT_COLOR);
+
+    RECT rcLine1{ rcWelcome.right - 470, rcWelcome.top + 300, rcWelcome.right - 70, rcWelcome.top + 380 };
+    RECT rcLine2{ rcWelcome.right - 420, rcWelcome.top + 360, rcWelcome.right - 70, rcWelcome.top + 450 };
+
+    DrawTextW(hdc, AppConfig::kWelcomeLine1, -1, &rcLine1, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DrawTextW(hdc, AppConfig::kWelcomeLine2, -1, &rcLine2, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+}
+
 void DrawTitleBar(HDC hdc, HWND hwnd)
 {
     RECT rcClient{};
@@ -179,10 +290,15 @@ void DrawTitleBar(HDC hdc, HWND hwnd)
     FillRectColor(hdc, rcMax, g_uiState.hoveredButton == CaptionButton::Maximize ? HOVER_COLOR : TITLEBAR_COLOR);
     FillRectColor(hdc, rcClose, g_uiState.hoveredButton == CaptionButton::Close ? HOVER_COLOR : TITLEBAR_COLOR);
 
-    RECT rcTitleText{ 12, 0, 300, TITLEBAR_HEIGHT };
+    DrawMenuToggle(hdc);
+
+    wchar_t clockBuffer[64]{};
+    FormatClockText(clockBuffer, _countof(clockBuffer));
+
+    RECT rcClock{ 0, 0, rcClient.right, TITLEBAR_HEIGHT };
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, ACCENT_COLOR);
-    DrawTextW(hdc, L"cyberCat", -1, &rcTitleText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DrawTextW(hdc, clockBuffer, -1, &rcClock, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     DrawButtonText(hdc, rcMin, L"—");
     DrawButtonText(hdc, rcMax, g_windowState.isMaximized ? L"❐" : L"□");
@@ -243,12 +359,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
     case WM_CREATE:
         ApplyRoundedCorners(hwnd);
+        SetTimer(hwnd, WM_APP_CLOCKTICK, 1000, nullptr);
         return 0;
 
     case WM_SIZE:
         ApplyRoundedCorners(hwnd);
         InvalidateRect(hwnd, nullptr, FALSE);
         return 0;
+
+    case WM_TIMER:
+        if (wParam == WM_APP_CLOCKTICK)
+        {
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+        break;
 
     case WM_NCHITTEST:
         return HandleNcHitTest(hwnd, lParam);
@@ -300,6 +425,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
+        if (PointInRectEx(pt, GetMenuToggleRect()))
+        {
+            g_uiState.isMenuOpen = !g_uiState.isMenuOpen;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
+        }
+
         return 0;
     }
 
@@ -307,7 +439,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         if (pt.y >= 0 && pt.y < TITLEBAR_HEIGHT &&
-            HitTestCaptionButton(hwnd, pt) == CaptionButton::None)
+            HitTestCaptionButton(hwnd, pt) == CaptionButton::None &&
+            !PointInRectEx(pt, GetMenuToggleRect()))
         {
             ToggleMaximize(hwnd);
             return 0;
@@ -326,6 +459,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         FillRectColor(hdc, rect, BG_COLOR);
         DrawTitleBar(hdc, hwnd);
 
+        if (g_uiState.isMenuOpen)
+        {
+            DrawSideMenu(hdc, rect);
+        }
+
+        DrawWelcomeText(hdc, rect);
+
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -334,6 +474,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 1;
 
     case WM_DESTROY:
+        KillTimer(hwnd, WM_APP_CLOCKTICK);
         PostQuitMessage(0);
         return 0;
 
@@ -363,7 +504,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HWND hwnd = CreateWindowExW(
         WS_EX_APPWINDOW,
         CLASS_NAME,
-        L"cyberCat",
+        AppConfig::kAppTitle,
         WS_POPUP | WS_THICKFRAME,
         CW_USEDEFAULT, CW_USEDEFAULT,
         WINDOW_WIDTH, WINDOW_HEIGHT,
