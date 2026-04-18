@@ -4,4 +4,5 @@
 target_link_libraries(cyberCat_ver2
     user32
     gdi32
+    dwmapi
 )
